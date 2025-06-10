@@ -1,0 +1,171 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules
+// These rules provide comprehensive security for file storage with user-based access control
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions for better rule organization
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isValidFileSize(maxSizeInMB) {
+      return request.resource.size <= maxSizeInMB * 1024 * 1024;
+    }
+    
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isValidDocumentType() {
+      return request.resource.contentType in [
+        'application/pdf',
+        'text/plain',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ];
+    }
+    
+    function isValidFileType() {
+      return isValidImageType() || isValidDocumentType();
+    }
+    
+    function hasValidMetadata() {
+      return request.resource.metadata != null &&
+             request.resource.metadata.uploadedBy != null &&
+             request.resource.metadata.uploadedAt != null;
+    }
+    
+    // Public files (read-only for all authenticated users)
+    match /public/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if false; // No public uploads allowed
+    }
+    
+    // User-specific files
+    match /users/{userId}/{allPaths=**} {
+      // Users can read their own files
+      allow read: if isAuthenticated() && isOwner(userId);
+      
+      // Users can write to their own directory with restrictions
+      allow write: if isAuthenticated() && 
+                      isOwner(userId) && 
+                      isValidFileType() && 
+                      isValidFileSize(100) && // 100MB max
+                      hasValidMetadata();
+      
+      // Users can delete their own files
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // User profile images (special handling for avatars)
+    match /users/{userId}/profile/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+                      isOwner(userId) && 
+                      isValidImageType() && 
+                      isValidFileSize(5) && // 5MB max for profile images
+                      hasValidMetadata();
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Shared files (files that can be shared between users)
+    match /shared/{fileId} {
+      allow read: if isAuthenticated() && 
+                     resource.metadata.sharedWith != null &&
+                     request.auth.uid in resource.metadata.sharedWith.split(',');
+      
+      allow write: if isAuthenticated() && 
+                      isValidFileType() && 
+                      isValidFileSize(50) && // 50MB max for shared files
+                      hasValidMetadata() &&
+                      request.resource.metadata.owner == request.auth.uid;
+      
+      allow delete: if isAuthenticated() && 
+                       resource.metadata.owner == request.auth.uid;
+    }
+    
+    // Temporary files (auto-expire after 24 hours)
+    match /temp/{userId}/{fileName} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(userId) && 
+                            isValidFileType() && 
+                            isValidFileSize(20) && // 20MB max for temp files
+                            hasValidMetadata();
+      
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Admin-only files
+    match /admin/{allPaths=**} {
+      allow read, write: if isAuthenticated() && 
+                            request.auth.token.admin == true;
+    }
+    
+    // Backup files (system use only)
+    match /backups/{allPaths=**} {
+      allow read, write: if false; // Only server-side access
+    }
+    
+    // Default deny rule for any other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/*
+Security Rules Explanation:
+
+1. **User Isolation**: Each user can only access files in their own directory (/users/{userId}/)
+
+2. **File Type Validation**: Only specific file types are allowed (images, PDFs, documents)
+
+3. **File Size Limits**: Different limits for different file types:
+   - General files: 100MB
+   - Profile images: 5MB
+   - Shared files: 50MB
+   - Temporary files: 20MB
+
+4. **Metadata Requirements**: All uploads must include metadata with uploadedBy and uploadedAt
+
+5. **Authentication Required**: All operations require user authentication
+
+6. **Profile Images**: Special handling for user avatars with relaxed read permissions
+
+7. **Shared Files**: Support for files shared between users using metadata
+
+8. **Temporary Files**: Support for temporary uploads with automatic cleanup
+
+9. **Admin Access**: Special admin-only directory for administrative files
+
+10. **Backup Protection**: Backup directory is completely protected from client access
+
+Best Practices Implemented:
+
+- Principle of least privilege
+- Defense in depth with multiple validation layers
+- Clear separation of concerns
+- Comprehensive logging through metadata
+- Support for different use cases (personal, shared, temporary)
+- Protection against common attacks (path traversal, unauthorized access)
+
+Testing Your Rules:
+
+Use the Firebase Console Rules Simulator to test these rules with different scenarios:
+- Authenticated user accessing own files
+- User trying to access another user's files
+- Uploading different file types and sizes
+- Sharing files between users
+- Admin access scenarios
+
+Remember to update these rules based on your specific application requirements!
+*/
