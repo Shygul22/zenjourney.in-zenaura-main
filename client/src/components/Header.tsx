@@ -1,9 +1,32 @@
 import React from 'react';
-import { Sparkles, Target, Clock } from 'lucide-react';
+import { Sparkles, Target, Clock, LogOut, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '../hooks/useAuth';
 
 export const Header = () => {
+  const { user, signOut } = useAuth();
   return (
-    <header className="text-center space-y-6 animate-fade-in">
+    <header className="text-center space-y-6 animate-fade-in relative">
+      {/* User Profile and Logout */}
+      {user && (
+        <div className="absolute top-0 right-4 flex items-center space-x-3">
+          <div className="flex items-center space-x-2 px-3 py-2 bg-white/70 rounded-full backdrop-blur-sm border border-white/30">
+            <User className="w-4 h-4 text-gray-600" />
+            <span className="text-sm font-medium text-gray-700">
+              {user.displayName || user.email || 'Demo User'}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={signOut}
+            className="bg-white/70 hover:bg-white/90 backdrop-blur-sm border border-white/30"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+      
       {/* Logo and Brand */}
       <div className="flex items-center justify-center space-x-3 mb-4">
         <div className="relative">

@@ -5,6 +5,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
+  setDoc,
   onSnapshot, 
   query, 
   orderBy, 
@@ -21,49 +22,56 @@ export const useFirebaseTasks = (userId?: string) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !db) {
       setTasks([]);
       setLoading(false);
       return;
     }
 
-    const tasksRef = collection(db, 'tasks');
-    const q = query(
-      tasksRef, 
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
-    );
+    try {
+      const tasksRef = collection(db, 'tasks');
+      const q = query(
+        tasksRef, 
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc')
+      );
 
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const tasksData = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
-            scheduledStart: data.scheduledStart instanceof Timestamp ? data.scheduledStart.toDate() : 
-                           data.scheduledStart ? new Date(data.scheduledStart) : undefined,
-            scheduledEnd: data.scheduledEnd instanceof Timestamp ? data.scheduledEnd.toDate() : 
-                         data.scheduledEnd ? new Date(data.scheduledEnd) : undefined,
-          } as Task;
-        });
-        setTasks(tasksData);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        console.error('Error fetching tasks:', err);
-        setError(err.message);
-        setLoading(false);
-      }
-    );
+      const unsubscribe = onSnapshot(q, 
+        (snapshot) => {
+          const tasksData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+              scheduledStart: data.scheduledStart instanceof Timestamp ? data.scheduledStart.toDate() : 
+                             data.scheduledStart ? new Date(data.scheduledStart) : undefined,
+              scheduledEnd: data.scheduledEnd instanceof Timestamp ? data.scheduledEnd.toDate() : 
+                           data.scheduledEnd ? new Date(data.scheduledEnd) : undefined,
+            } as Task;
+          });
+          setTasks(tasksData);
+          setLoading(false);
+          setError(null);
+        },
+        (err) => {
+          console.error('Error fetching tasks:', err);
+          setError(err.message);
+          setLoading(false);
+        }
+      );
 
-    return () => unsubscribe();
+      return () => unsubscribe();
+    } catch (err: any) {
+      console.error('Error setting up tasks listener:', err);
+      setError(err.message);
+      setLoading(false);
+    }
   }, [userId]);
 
   const addTask = async (name: string, priority: number, effort: number) => {
     if (!userId) throw new Error('User not authenticated');
+    if (!db) throw new Error('Firebase not configured');
     
     const createdAt = new Date();
     const priorityScore = calculatePriorityScore(priority, effort, createdAt);
@@ -162,36 +170,43 @@ export const useFirebaseSettings = (userId?: string) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !db) {
       setLoading(false);
       return;
     }
 
-    const settingsRef = doc(db, 'settings', userId);
-    const unsubscribe = onSnapshot(settingsRef,
-      (doc) => {
-        if (doc.exists()) {
-          setSettings(doc.data() as WorkdaySettings);
+    try {
+      const settingsRef = doc(db, 'settings', userId);
+      const unsubscribe = onSnapshot(settingsRef,
+        (doc) => {
+          if (doc.exists()) {
+            setSettings(doc.data() as WorkdaySettings);
+          }
+          setLoading(false);
+          setError(null);
+        },
+        (err) => {
+          console.error('Error fetching settings:', err);
+          setError(err.message);
+          setLoading(false);
         }
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        console.error('Error fetching settings:', err);
-        setError(err.message);
-        setLoading(false);
-      }
-    );
+      );
 
-    return () => unsubscribe();
+      return () => unsubscribe();
+    } catch (err: any) {
+      console.error('Error setting up settings listener:', err);
+      setError(err.message);
+      setLoading(false);
+    }
   }, [userId]);
 
   const updateSettings = async (newSettings: WorkdaySettings) => {
     if (!userId) throw new Error('User not authenticated');
+    if (!db) throw new Error('Firebase not configured');
     
     try {
       const settingsRef = doc(db, 'settings', userId);
-      await updateDoc(settingsRef, { ...newSettings });
+      await setDoc(settingsRef, { ...newSettings }, { merge: true });
       setSettings(newSettings);
     } catch (err) {
       console.error('Error updating settings:', err);
