@@ -70,6 +70,10 @@ export const useFirebaseTasks = (userId?: string) => {
 
     const setupListener = async () => {
       try {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        
         const tasksRef = collection(db, 'tasks');
         const q = query(
           tasksRef, 
@@ -146,12 +150,17 @@ export const useFirebaseTasks = (userId?: string) => {
   const addTask = async (name: string, priority: number, effort: number) => {
     if (!userId) throw new Error('User not authenticated');
     
+    // Validate inputs
+    if (!name?.trim()) throw new Error('Task name is required');
+    if (priority < 1 || priority > 5) throw new Error('Priority must be between 1 and 5');
+    if (effort < 1 || effort > 5) throw new Error('Effort must be between 1 and 5');
+    
     const createdAt = new Date();
     const priorityScore = calculatePriorityScore(priority, effort, createdAt);
     
     const newTask: Task = {
       id: Date.now().toString(),
-      name,
+      name: name.trim(),
       priority,
       effort,
       completed: false,
@@ -169,7 +178,7 @@ export const useFirebaseTasks = (userId?: string) => {
     
     // Firebase mode
     const taskData = {
-      name,
+      name: name.trim(),
       priority,
       effort,
       completed: false,
@@ -178,14 +187,27 @@ export const useFirebaseTasks = (userId?: string) => {
       priorityScore,
     };
     
-    await addDoc(collection(db, 'tasks'), taskData);
+    try {
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+      
+      await addDoc(collection(db, 'tasks'), taskData);
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`Failed to save task: ${error.message}`);
+    }
   };
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
     if (!userId) throw new Error('User not authenticated');
+    if (!id?.trim()) throw new Error('Task ID is required');
 
     // Demo mode - use localStorage
     if (userId.startsWith('demo-user-') || !db) {
+      const taskExists = tasks.some(task => task.id === id);
+      if (!taskExists) throw new Error('Task not found');
+      
       const updatedTasks = tasks.map(task => 
         task.id === id ? { ...task, ...updates } : task
       );
@@ -195,15 +217,31 @@ export const useFirebaseTasks = (userId?: string) => {
     }
 
     // Firebase mode
-    const taskRef = doc(db, 'tasks', id);
-    await updateDoc(taskRef, updates);
+    try {
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+      
+      const taskRef = doc(db, 'tasks', id);
+      const cleanUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, value]) => value !== undefined)
+      );
+      await updateDoc(taskRef, cleanUpdates);
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`Failed to update task: ${error.message}`);
+    }
   };
 
   const deleteTask = async (id: string) => {
     if (!userId) throw new Error('User not authenticated');
+    if (!id?.trim()) throw new Error('Task ID is required');
 
     // Demo mode - use localStorage
     if (userId.startsWith('demo-user-') || !db) {
+      const taskExists = tasks.some(task => task.id === id);
+      if (!taskExists) throw new Error('Task not found');
+      
       const updatedTasks = tasks.filter(task => task.id !== id);
       setTasks(updatedTasks);
       saveTasksToLocalStorage(updatedTasks);
@@ -211,7 +249,16 @@ export const useFirebaseTasks = (userId?: string) => {
     }
 
     // Firebase mode
-    await deleteDoc(doc(db, 'tasks', id));
+    try {
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+      
+      await deleteDoc(doc(db, 'tasks', id));
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`Failed to delete task: ${error.message}`);
+    }
   };
 
   const toggleTask = async (id: string) => {
@@ -239,8 +286,23 @@ export const useFirebaseTasks = (userId?: string) => {
     }
 
     // Firebase mode - delete all user tasks
-    const tasksToDelete = tasks.map(task => deleteDoc(doc(db, 'tasks', task.id)));
-    await Promise.all(tasksToDelete);
+    try {
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+      
+      const deletePromises = tasks.map(task => 
+        deleteDoc(doc(db, 'tasks', task.id)).catch(err => {
+          console.error(`Failed to delete task ${task.id}:`, err);
+          return null; // Continue with other deletions
+        })
+      );
+      
+      await Promise.allSettled(deletePromises);
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`Failed to clear tasks: ${error.message}`);
+    }
   };
 
   return {
@@ -295,6 +357,10 @@ export const useFirebaseSettings = (userId?: string) => {
     // Firebase mode
     const setupListener = async () => {
       try {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        
         const settingsRef = doc(db, 'settings', userId);
         unsubscribe = onSnapshot(settingsRef, 
           (doc) => {
@@ -342,18 +408,46 @@ export const useFirebaseSettings = (userId?: string) => {
 
   const updateSettings = async (newSettings: WorkdaySettings) => {
     if (!userId) throw new Error('User not authenticated');
+    
+    // Validate settings
+    if (!newSettings.startTime || !newSettings.endTime) {
+      throw new Error('Start time and end time are required');
+    }
+    if (typeof newSettings.breakDuration !== 'number' || newSettings.breakDuration < 0) {
+      throw new Error('Break duration must be a positive number');
+    }
+
+    // Validate time format (HH:MM)
+    const timeFormat = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeFormat.test(newSettings.startTime) || !timeFormat.test(newSettings.endTime)) {
+      throw new Error('Invalid time format. Use HH:MM format');
+    }
 
     setSettings(newSettings);
 
     // Demo mode - use localStorage
     if (userId.startsWith('demo-user-') || !db) {
-      localStorage.setItem('zenjourney-demo-settings', JSON.stringify(newSettings));
+      try {
+        localStorage.setItem('zenjourney-demo-settings', JSON.stringify(newSettings));
+      } catch (err) {
+        console.error('Failed to save demo settings:', err);
+        throw new Error('Failed to save settings locally');
+      }
       return;
     }
 
     // Firebase mode
-    const settingsRef = doc(db, 'settings', userId);
-    await setDoc(settingsRef, newSettings, { merge: true });
+    try {
+      if (!db) {
+        throw new Error('Database not initialized');
+      }
+      
+      const settingsRef = doc(db, 'settings', userId);
+      await setDoc(settingsRef, newSettings, { merge: true });
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`Failed to save settings: ${error.message}`);
+    }
   };
 
   return {

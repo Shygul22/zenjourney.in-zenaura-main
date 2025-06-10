@@ -185,7 +185,11 @@ const Index = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <div className="text-lg text-gray-600 dark:text-gray-300">Loading...</div>
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="text-lg font-medium text-gray-700 dark:text-gray-300">Loading your workspace...</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Setting up tasks and settings</div>
+        </div>
       </div>
     );
   }
