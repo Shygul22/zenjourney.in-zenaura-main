@@ -3,9 +3,9 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 // Only initialize Firebase if proper environment variables are provided
-let app;
-let db;
-let auth;
+let app: any;
+let db: any;
+let auth: any;
 
 const hasFirebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY && 
                          import.meta.env.VITE_FIREBASE_PROJECT_ID &&

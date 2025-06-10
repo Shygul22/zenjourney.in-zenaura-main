@@ -4,7 +4,8 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged, 
   User,
-  signOut as firebaseSignOut
+  signOut as firebaseSignOut,
+  Auth
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
@@ -20,7 +21,7 @@ export const useAuth = () => {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth as Auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
@@ -55,18 +56,28 @@ export const useAuth = () => {
 
   const signInWithGoogle = async () => {
     if (!auth) {
-      setError('Firebase not initialized');
+      setError('Google sign-in requires Firebase configuration. Please use demo mode or contact support.');
       return;
     }
 
     try {
       setLoading(true);
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      setUser(result.user);
       setError(null);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth as Auth, provider);
+      setUser(result.user);
     } catch (err: any) {
-      setError(err.message);
+      let errorMessage = 'Sign-in failed. Please try again.';
+      
+      if (err.code === 'auth/api-key-not-valid') {
+        errorMessage = 'Firebase configuration issue. Please use demo mode or contact support.';
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in was cancelled.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Google sign-in is not enabled. Please use demo mode.';
+      }
+      
+      setError(errorMessage);
       console.error('Google sign in failed:', err);
     } finally {
       setLoading(false);
@@ -123,7 +134,7 @@ export const useAuth = () => {
     }
     
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(auth as Auth);
       setUser(null);
       setDbUser(null);
     } catch (err: any) {
