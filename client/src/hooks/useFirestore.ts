@@ -21,10 +21,48 @@ export const useFirebaseTasks = (userId?: string) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!userId || !db) {
+  // localStorage helper functions for demo mode
+  const loadTasksFromLocalStorage = () => {
+    try {
+      const savedTasks = localStorage.getItem('zenjourney-demo-tasks');
+      if (savedTasks) {
+        const parsedTasks = JSON.parse(savedTasks).map((task: any) => ({
+          ...task,
+          createdAt: new Date(task.createdAt),
+          scheduledStart: task.scheduledStart ? new Date(task.scheduledStart) : undefined,
+          scheduledEnd: task.scheduledEnd ? new Date(task.scheduledEnd) : undefined,
+        }));
+        setTasks(parsedTasks);
+      } else {
+        setTasks([]);
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error('Error loading demo tasks:', err);
       setTasks([]);
       setLoading(false);
+    }
+  };
+
+  const saveTasksToLocalStorage = (newTasks: Task[]) => {
+    try {
+      localStorage.setItem('zenjourney-demo-tasks', JSON.stringify(newTasks));
+    } catch (err) {
+      console.error('Error saving demo tasks:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (!userId) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
+
+    // Check if user is a demo user (starts with 'demo-user-')
+    if (userId.startsWith('demo-user-') || !db) {
+      // Use localStorage for demo mode
+      loadTasksFromLocalStorage();
       return;
     }
 
@@ -71,62 +109,79 @@ export const useFirebaseTasks = (userId?: string) => {
 
   const addTask = async (name: string, priority: number, effort: number) => {
     if (!userId) throw new Error('User not authenticated');
-    if (!db) throw new Error('Firebase not configured');
     
     const createdAt = new Date();
     const priorityScore = calculatePriorityScore(priority, effort, createdAt);
     
+    const newTask: Task = {
+      id: Date.now().toString(),
+      name,
+      priority,
+      effort,
+      completed: false,
+      createdAt,
+      priorityScore,
+    };
+
+    // Demo mode - use localStorage
+    if (userId.startsWith('demo-user-') || !db) {
+      const updatedTasks = [newTask, ...tasks];
+      setTasks(updatedTasks);
+      saveTasksToLocalStorage(updatedTasks);
+      return;
+    }
+    
+    // Firebase mode
     const taskData = {
       name,
       priority,
       effort,
       completed: false,
+      userId,
       createdAt: serverTimestamp(),
       priorityScore,
-      userId
     };
-
-    try {
-      await addDoc(collection(db, 'tasks'), taskData);
-    } catch (err) {
-      console.error('Error adding task:', err);
-      throw err;
-    }
+    
+    await addDoc(collection(db, 'tasks'), taskData);
   };
 
-  const updateTask = async (taskId: string, updates: Partial<Task>) => {
-    try {
-      const taskRef = doc(db, 'tasks', taskId);
-      const updateData = { ...updates };
-      
-      // Convert dates to timestamps for Firestore
-      if (updateData.scheduledStart) {
-        updateData.scheduledStart = Timestamp.fromDate(updateData.scheduledStart) as any;
-      }
-      if (updateData.scheduledEnd) {
-        updateData.scheduledEnd = Timestamp.fromDate(updateData.scheduledEnd) as any;
-      }
-      
-      await updateDoc(taskRef, updateData);
-    } catch (err) {
-      console.error('Error updating task:', err);
-      throw err;
+  const updateTask = async (id: string, updates: Partial<Task>) => {
+    if (!userId) throw new Error('User not authenticated');
+
+    // Demo mode - use localStorage
+    if (userId.startsWith('demo-user-') || !db) {
+      const updatedTasks = tasks.map(task => 
+        task.id === id ? { ...task, ...updates } : task
+      );
+      setTasks(updatedTasks);
+      saveTasksToLocalStorage(updatedTasks);
+      return;
     }
+
+    // Firebase mode
+    const taskRef = doc(db, 'tasks', id);
+    await updateDoc(taskRef, updates);
   };
 
-  const deleteTask = async (taskId: string) => {
-    try {
-      await deleteDoc(doc(db, 'tasks', taskId));
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      throw err;
+  const deleteTask = async (id: string) => {
+    if (!userId) throw new Error('User not authenticated');
+
+    // Demo mode - use localStorage
+    if (userId.startsWith('demo-user-') || !db) {
+      const updatedTasks = tasks.filter(task => task.id !== id);
+      setTasks(updatedTasks);
+      saveTasksToLocalStorage(updatedTasks);
+      return;
     }
+
+    // Firebase mode
+    await deleteDoc(doc(db, 'tasks', id));
   };
 
-  const toggleTask = async (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
+  const toggleTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
     if (task) {
-      await updateTask(taskId, { completed: !task.completed });
+      await updateTask(id, { completed: !task.completed });
     }
   };
 
@@ -138,13 +193,18 @@ export const useFirebaseTasks = (userId?: string) => {
   };
 
   const clearAllTasks = async () => {
-    try {
-      const deletions = tasks.map(task => deleteTask(task.id));
-      await Promise.all(deletions);
-    } catch (err) {
-      console.error('Error clearing tasks:', err);
-      throw err;
+    if (!userId) throw new Error('User not authenticated');
+
+    // Demo mode - use localStorage
+    if (userId.startsWith('demo-user-') || !db) {
+      setTasks([]);
+      saveTasksToLocalStorage([]);
+      return;
     }
+
+    // Firebase mode - delete all user tasks
+    const tasksToDelete = tasks.map(task => deleteDoc(doc(db, 'tasks', task.id)));
+    await Promise.all(tasksToDelete);
   };
 
   return {
@@ -164,20 +224,31 @@ export const useFirebaseSettings = (userId?: string) => {
   const [settings, setSettings] = useState<WorkdaySettings>({
     startTime: '09:00',
     endTime: '17:00',
-    breakDuration: 15
+    breakDuration: 30
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId || !db) {
+    if (!userId) {
       setLoading(false);
       return;
     }
 
+    // Demo mode - use localStorage
+    if (userId.startsWith('demo-user-') || !db) {
+      const savedSettings = localStorage.getItem('zenjourney-demo-settings');
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
+      }
+      setLoading(false);
+      return;
+    }
+
+    // Firebase mode
     try {
       const settingsRef = doc(db, 'settings', userId);
-      const unsubscribe = onSnapshot(settingsRef,
+      const unsubscribe = onSnapshot(settingsRef, 
         (doc) => {
           if (doc.exists()) {
             setSettings(doc.data() as WorkdaySettings);
@@ -202,16 +273,18 @@ export const useFirebaseSettings = (userId?: string) => {
 
   const updateSettings = async (newSettings: WorkdaySettings) => {
     if (!userId) throw new Error('User not authenticated');
-    if (!db) throw new Error('Firebase not configured');
-    
-    try {
-      const settingsRef = doc(db, 'settings', userId);
-      await setDoc(settingsRef, { ...newSettings }, { merge: true });
-      setSettings(newSettings);
-    } catch (err) {
-      console.error('Error updating settings:', err);
-      throw err;
+
+    setSettings(newSettings);
+
+    // Demo mode - use localStorage
+    if (userId.startsWith('demo-user-') || !db) {
+      localStorage.setItem('zenjourney-demo-settings', JSON.stringify(newSettings));
+      return;
     }
+
+    // Firebase mode
+    const settingsRef = doc(db, 'settings', userId);
+    await setDoc(settingsRef, newSettings, { merge: true });
   };
 
   return {
@@ -223,9 +296,8 @@ export const useFirebaseSettings = (userId?: string) => {
 };
 
 const calculatePriorityScore = (priority: number, effort: number, createdAt: Date): number => {
-  const urgencyScore = priority * 20; // 20-100 based on priority
-  const timeDecay = Math.max(0, (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)); // Days since creation
-  const effortPenalty = Math.max(0, (effort - 1) * 5); // Penalty for longer tasks
-  
-  return Math.max(0, urgencyScore + timeDecay * 2 - effortPenalty);
+  const daysSinceCreated = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+  const urgencyMultiplier = 1 + (daysSinceCreated * 0.1);
+  const efficiencyScore = priority / Math.max(effort, 1);
+  return efficiencyScore * urgencyMultiplier;
 };
