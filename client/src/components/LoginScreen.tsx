@@ -7,8 +7,8 @@ import { useAuth } from '../hooks/useAuth';
 export const LoginScreen = () => {
   const { signInWithGoogle, signInDemo, loading, error } = useAuth();
   
-  const isUnauthorizedDomain = error && error.includes('auth/unauthorized-domain');
-  const isOperationNotAllowed = error && error.includes('auth/operation-not-allowed');
+  const isUnauthorizedDomain = error && (error.includes('auth/unauthorized-domain') || error.includes('unauthorized-domain'));
+  const isOperationNotAllowed = error && (error.includes('auth/operation-not-allowed') || error.includes('operation-not-allowed'));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">

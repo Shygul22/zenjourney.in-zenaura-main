@@ -49,6 +49,8 @@ export const useAuth = () => {
         errorMessage = 'Sign-in was cancelled.';
       } else if (err.code === 'auth/operation-not-allowed') {
         errorMessage = 'Google sign-in is not enabled. Please use demo mode.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        errorMessage = 'This domain needs to be authorized in Firebase. Please use demo mode or add this domain to your Firebase project.';
       }
       
       setError(errorMessage);
