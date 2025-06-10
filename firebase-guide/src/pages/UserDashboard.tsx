@@ -374,7 +374,7 @@ export const UserDashboard: React.FC = () => {
                 <CardTitle className="flex items-center justify-between">
                   Profile Information
                   {!isEditingProfile ? (
-                    <Button variant="outline" size="sm" onClick={() => setIsEditingProfile(true)}>
+                    <Button variant="outline\" size="sm\" onClick={() => setIsEditingProfile(true)}>
                       <Edit className="w-4 h-4 mr-2" />
                       Edit
                     </Button>
