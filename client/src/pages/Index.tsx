@@ -6,6 +6,7 @@ import { Header } from '../components/Header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { storage } from '../lib/storage';
 import { CheckSquare, Calendar, Settings as SettingsIcon, Menu, X } from 'lucide-react';
 
 export interface Task {
@@ -38,26 +39,17 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // Load data from localStorage on mount
+  // Load data on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const savedTasks = localStorage.getItem('zenjourney-tasks');
-        const savedSettings = localStorage.getItem('zenjourney-settings');
+        const [loadedTasks, loadedSettings] = await Promise.all([
+          storage.tasks.getAll(),
+          storage.settings.get()
+        ]);
         
-        if (savedTasks) {
-          const parsedTasks = JSON.parse(savedTasks).map((task: any) => ({
-            ...task,
-            createdAt: new Date(task.createdAt),
-            scheduledStart: task.scheduledStart ? new Date(task.scheduledStart) : undefined,
-            scheduledEnd: task.scheduledEnd ? new Date(task.scheduledEnd) : undefined,
-          }));
-          setTasks(parsedTasks);
-        }
-        
-        if (savedSettings) {
-          setWorkdaySettings(JSON.parse(savedSettings));
-        }
+        setTasks(loadedTasks);
+        setWorkdaySettings(loadedSettings);
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
@@ -73,20 +65,6 @@ const Index = () => {
     loadData();
   }, [toast]);
 
-  // Save tasks to localStorage whenever tasks change
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem('zenjourney-tasks', JSON.stringify(tasks));
-    }
-  }, [tasks, isLoading]);
-
-  // Save settings to localStorage whenever settings change
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem('zenjourney-settings', JSON.stringify(workdaySettings));
-    }
-  }, [workdaySettings, isLoading]);
-
   const calculatePriorityScore = (priority: number, effort: number, createdAt: Date): number => {
     const urgencyScore = priority * 20; // 20-100 based on priority
     const timeDecay = Math.max(0, (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)); // Days since creation
@@ -95,65 +73,121 @@ const Index = () => {
     return Math.max(0, urgencyScore + timeDecay * 2 - effortPenalty);
   };
 
-  const addTask = (name: string, priority: number, effort: number) => {
-    const newTask: Task = {
-      id: Date.now().toString(),
-      name,
-      priority,
-      effort,
-      completed: false,
-      createdAt: new Date(),
-      priorityScore: 0
-    };
-    
-    newTask.priorityScore = calculatePriorityScore(priority, effort, newTask.createdAt);
-    setTasks(prev => [...prev, newTask]);
-    
-    toast({
-      title: "✅ Task Added",
-      description: `"${name}" has been added to your task list`,
-    });
+  const addTask = async (name: string, priority: number, effort: number) => {
+    try {
+      await storage.tasks.add(name, priority, effort);
+      const updatedTasks = await storage.tasks.getAll();
+      setTasks(updatedTasks);
+      
+      toast({
+        title: "✅ Task Added",
+        description: `"${name}" has been added to your task list`,
+      });
+    } catch (error) {
+      console.error('Error adding task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add task. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const toggleTask = (id: string) => {
-    setTasks(prev => prev.map(task => {
-      if (task.id === id) {
-        const updatedTask = { ...task, completed: !task.completed };
-        if (updatedTask.completed) {
+  const toggleTask = async (id: string) => {
+    try {
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        await storage.tasks.update(id, { completed: !task.completed });
+        const updatedTasks = await storage.tasks.getAll();
+        setTasks(updatedTasks);
+        
+        if (!task.completed) {
           toast({
             title: "🎉 Task Completed",
             description: `Great job completing "${task.name}"!`,
           });
         }
-        return updatedTask;
       }
-      return task;
-    }));
+    } catch (error) {
+      console.error('Error toggling task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update task. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const deleteTask = (id: string) => {
-    const taskToDelete = tasks.find(task => task.id === id);
-    setTasks(prev => prev.filter(task => task.id !== id));
-    toast({
-      title: "🗑️ Task Deleted",
-      description: `"${taskToDelete?.name}" has been removed from your list`,
-    });
+  const deleteTask = async (id: string) => {
+    try {
+      const taskToDelete = tasks.find(task => task.id === id);
+      await storage.tasks.delete(id);
+      const updatedTasks = await storage.tasks.getAll();
+      setTasks(updatedTasks);
+      
+      toast({
+        title: "🗑️ Task Deleted",
+        description: `"${taskToDelete?.name}" has been removed from your list`,
+      });
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete task. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const clearAllTasks = () => {
-    setTasks([]);
-    toast({
-      title: "🧹 All Tasks Cleared",
-      description: "Your task list has been cleared",
-    });
+  const clearAllTasks = async () => {
+    try {
+      await storage.tasks.clear();
+      setTasks([]);
+      toast({
+        title: "🧹 All Tasks Cleared",
+        description: "Your task list has been cleared",
+      });
+    } catch (error) {
+      console.error('Error clearing tasks:', error);
+      toast({
+        title: "Error",
+        description: "Failed to clear tasks. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const rescheduleTask = (taskId: string, newStart: Date, newEnd: Date) => {
-    setTasks(prev => prev.map(task => 
-      task.id === taskId 
-        ? { ...task, scheduledStart: newStart, scheduledEnd: newEnd }
-        : task
-    ));
+  const rescheduleTask = async (taskId: string, newStart: Date, newEnd: Date) => {
+    try {
+      await storage.tasks.update(taskId, { scheduledStart: newStart, scheduledEnd: newEnd });
+      const updatedTasks = await storage.tasks.getAll();
+      setTasks(updatedTasks);
+    } catch (error) {
+      console.error('Error rescheduling task:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reschedule task. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const updateWorkdaySettings = async (newSettings: WorkdaySettings) => {
+    try {
+      await storage.settings.update(newSettings);
+      setWorkdaySettings(newSettings);
+      toast({
+        title: "Settings Updated",
+        description: "Your workday settings have been saved",
+      });
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update settings. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const tabConfig = [
@@ -310,7 +344,7 @@ const Index = () => {
             <TabsContent value="settings" className="animate-fade-in">
               <Settings
                 settings={workdaySettings}
-                onUpdateSettings={setWorkdaySettings}
+                onUpdateSettings={updateWorkdaySettings}
               />
             </TabsContent>
           </Tabs>
