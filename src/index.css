@@ -270,11 +270,13 @@
   }
 
   .interactive-secondary:hover {
-    @apply bg-gray-200 transform translateY(-1px) shadow-md;
+    @apply bg-gray-200 shadow-md;
+    transform: translateY(-1px);
   }
 
   .interactive-secondary:active {
-    @apply bg-gray-300 transform translateY(0);
+    @apply bg-gray-300;
+    transform: translateY(0);
   }
 
   /* Card styles */
@@ -283,7 +285,8 @@
   }
 
   .card-elevated:hover {
-    @apply shadow-xl transform translateY(-2px);
+    @apply shadow-xl;
+    transform: translateY(-2px);
   }
 
   /* Typography utilities */
