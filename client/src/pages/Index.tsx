@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { TaskList } from '../components/TaskList';
 import { TimeBlocking } from '../components/TimeBlocking';
 import { Settings } from '../components/Settings';
@@ -6,8 +6,10 @@ import { Header } from '../components/Header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { storage } from '../lib/storage';
-import { CheckSquare, Calendar, Settings as SettingsIcon, Menu, X } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { useTasks, useCreateTask, useUpdateTask, useDeleteTask, useClearAllTasks, DatabaseTask } from '../hooks/useTasks';
+import { useSettings, useUpdateSettings, DatabaseSettings } from '../hooks/useSettings';
+import { CheckSquare, Calendar, Settings as SettingsIcon, Menu, X, LogOut } from 'lucide-react';
 
 export interface Task {
   id: string;
@@ -28,59 +30,53 @@ export interface WorkdaySettings {
 }
 
 const Index = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [workdaySettings, setWorkdaySettings] = useState<WorkdaySettings>({
-    startTime: '09:00',
-    endTime: '17:00',
-    breakDuration: 15
-  });
   const [activeTab, setActiveTab] = useState('tasks');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { user, dbUser, signOut } = useAuth();
+  
+  // Database hooks
+  const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useTasks(dbUser?.id);
+  const { data: settings, isLoading: settingsLoading } = useSettings(dbUser?.id);
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const deleteTask = useDeleteTask();
+  const clearAllTasks = useClearAllTasks();
+  const updateSettings = useUpdateSettings();
 
-  // Load data on mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [loadedTasks, loadedSettings] = await Promise.all([
-          storage.tasks.getAll(),
-          storage.settings.get()
-        ]);
-        
-        setTasks(loadedTasks);
-        setWorkdaySettings(loadedSettings);
-      } catch (error) {
-        console.error('Error loading data:', error);
-        toast({
-          title: "Loading Error",
-          description: "Failed to load saved data. Starting fresh.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const isLoading = tasksLoading || settingsLoading;
 
-    loadData();
-  }, [toast]);
+  // Convert database tasks to component format
+  const convertedTasks: Task[] = tasks.map((task: DatabaseTask) => ({
+    id: task.id.toString(),
+    name: task.name,
+    priority: task.priority,
+    effort: task.effort,
+    completed: task.completed,
+    priorityScore: parseFloat(task.priorityScore),
+    createdAt: new Date(task.createdAt),
+    scheduledStart: task.scheduledStart ? new Date(task.scheduledStart) : undefined,
+    scheduledEnd: task.scheduledEnd ? new Date(task.scheduledEnd) : undefined,
+  }));
 
-  const calculatePriorityScore = (priority: number, effort: number, createdAt: Date): number => {
-    const urgencyScore = priority * 20; // 20-100 based on priority
-    const timeDecay = Math.max(0, (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)); // Days since creation
-    const effortPenalty = Math.max(0, (effort - 1) * 5); // Penalty for longer tasks
-    
-    return Math.max(0, urgencyScore + timeDecay * 2 - effortPenalty);
+  // Convert database settings to component format
+  const workdaySettings: WorkdaySettings = settings ? {
+    startTime: settings.startTime,
+    endTime: settings.endTime,
+    breakDuration: settings.breakDuration,
+  } : {
+    startTime: '09:00',
+    endTime: '17:00',
+    breakDuration: 15,
   };
 
   const addTask = async (name: string, priority: number, effort: number) => {
+    if (!dbUser?.id) return;
+    
     try {
-      await storage.tasks.add(name, priority, effort);
-      const updatedTasks = await storage.tasks.getAll();
-      setTasks(updatedTasks);
-      
+      await createTask.mutateAsync({ name, priority, effort, userId: dbUser.id });
       toast({
-        title: "✅ Task Added",
+        title: "Task Added",
         description: `"${name}" has been added to your task list`,
       });
     } catch (error) {
@@ -94,16 +90,20 @@ const Index = () => {
   };
 
   const toggleTask = async (id: string) => {
+    if (!dbUser?.id) return;
+    
     try {
-      const task = tasks.find(t => t.id === id);
+      const task = convertedTasks.find(t => t.id === id);
       if (task) {
-        await storage.tasks.update(id, { completed: !task.completed });
-        const updatedTasks = await storage.tasks.getAll();
-        setTasks(updatedTasks);
+        await updateTask.mutateAsync({
+          id: parseInt(id),
+          updates: { completed: !task.completed },
+          userId: dbUser.id
+        });
         
         if (!task.completed) {
           toast({
-            title: "🎉 Task Completed",
+            title: "Task Completed",
             description: `Great job completing "${task.name}"!`,
           });
         }
@@ -118,15 +118,15 @@ const Index = () => {
     }
   };
 
-  const deleteTask = async (id: string) => {
+  const deleteTaskHandler = async (id: string) => {
+    if (!dbUser?.id) return;
+    
     try {
-      const taskToDelete = tasks.find(task => task.id === id);
-      await storage.tasks.delete(id);
-      const updatedTasks = await storage.tasks.getAll();
-      setTasks(updatedTasks);
+      const taskToDelete = convertedTasks.find(task => task.id === id);
+      await deleteTask.mutateAsync({ id: parseInt(id), userId: dbUser.id });
       
       toast({
-        title: "🗑️ Task Deleted",
+        title: "Task Deleted",
         description: `"${taskToDelete?.name}" has been removed from your list`,
       });
     } catch (error) {
@@ -139,12 +139,13 @@ const Index = () => {
     }
   };
 
-  const clearAllTasks = async () => {
+  const clearAllTasksHandler = async () => {
+    if (!dbUser?.id) return;
+    
     try {
-      await storage.tasks.clear();
-      setTasks([]);
+      await clearAllTasks.mutateAsync(dbUser.id);
       toast({
-        title: "🧹 All Tasks Cleared",
+        title: "All Tasks Cleared",
         description: "Your task list has been cleared",
       });
     } catch (error) {
@@ -158,10 +159,17 @@ const Index = () => {
   };
 
   const rescheduleTask = async (taskId: string, newStart: Date, newEnd: Date) => {
+    if (!dbUser?.id) return;
+    
     try {
-      await storage.tasks.update(taskId, { scheduledStart: newStart, scheduledEnd: newEnd });
-      const updatedTasks = await storage.tasks.getAll();
-      setTasks(updatedTasks);
+      await updateTask.mutateAsync({
+        id: parseInt(taskId),
+        updates: { 
+          scheduledStart: newStart.toISOString(),
+          scheduledEnd: newEnd.toISOString()
+        },
+        userId: dbUser.id
+      });
     } catch (error) {
       console.error('Error rescheduling task:', error);
       toast({
@@ -173,9 +181,15 @@ const Index = () => {
   };
 
   const updateWorkdaySettings = async (newSettings: WorkdaySettings) => {
+    if (!dbUser?.id) return;
+    
     try {
-      await storage.settings.update(newSettings);
-      setWorkdaySettings(newSettings);
+      await updateSettings.mutateAsync({
+        userId: dbUser.id,
+        startTime: newSettings.startTime,
+        endTime: newSettings.endTime,
+        breakDuration: newSettings.breakDuration,
+      });
       toast({
         title: "Settings Updated",
         description: "Your workday settings have been saved",
@@ -325,17 +339,17 @@ const Index = () => {
             
             <TabsContent value="tasks" className="animate-fade-in">
               <TaskList
-                tasks={tasks}
+                tasks={convertedTasks}
                 onAddTask={addTask}
                 onToggleTask={toggleTask}
-                onDeleteTask={deleteTask}
-                onClearAll={clearAllTasks}
+                onDeleteTask={deleteTaskHandler}
+                onClearAll={clearAllTasksHandler}
               />
             </TabsContent>
             
             <TabsContent value="timeblocking" className="animate-fade-in">
               <TimeBlocking
-                tasks={tasks}
+                tasks={convertedTasks}
                 workdaySettings={workdaySettings}
                 onRescheduleTask={rescheduleTask}
               />
