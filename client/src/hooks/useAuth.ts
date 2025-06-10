@@ -73,8 +73,54 @@ export const useAuth = () => {
     }
   };
 
+  const signInDemo = async () => {
+    try {
+      setLoading(true);
+      
+      // Create a demo user
+      const demoUser = {
+        uid: 'demo-user-' + Date.now(),
+        email: 'demo@zenjourney.app',
+        displayName: 'Demo User'
+      };
+      
+      // Register demo user in database
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: demoUser.uid,
+          email: demoUser.email,
+          displayName: demoUser.displayName
+        })
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        setDbUser(userData);
+        // Create a mock Firebase user object
+        setUser({
+          uid: demoUser.uid,
+          email: demoUser.email,
+          displayName: demoUser.displayName
+        } as any);
+        setError(null);
+      }
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Demo sign in failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
-    if (!auth) return;
+    if (!auth) {
+      // Demo mode logout
+      setUser(null);
+      setDbUser(null);
+      return;
+    }
     
     try {
       await firebaseSignOut(auth);
@@ -92,6 +138,7 @@ export const useAuth = () => {
     loading,
     error,
     signInWithGoogle,
+    signInDemo,
     signOut,
     isAuthenticated: !!user
   };

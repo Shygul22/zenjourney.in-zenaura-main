@@ -1,11 +1,11 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogIn, CheckSquare, Calendar, Settings, AlertCircle, ExternalLink } from 'lucide-react';
+import { LogIn, CheckSquare, Calendar, Settings, AlertCircle, ExternalLink, User } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export const LoginScreen = () => {
-  const { signInWithGoogle, loading, error } = useAuth();
+  const { signInWithGoogle, signInDemo, loading, error } = useAuth();
   
   const isUnauthorizedDomain = error && error.includes('auth/unauthorized-domain');
   const isOperationNotAllowed = error && error.includes('auth/operation-not-allowed');
@@ -128,6 +128,27 @@ export const LoginScreen = () => {
                   <span>Sign in with Google</span>
                 </div>
               )}
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-gray-500">Or</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={signInDemo}
+              disabled={loading}
+              variant="outline"
+              className="w-full h-12 text-base border-2 hover:bg-gray-50"
+            >
+              <div className="flex items-center space-x-2">
+                <User className="w-5 h-5" />
+                <span>Try Demo Mode</span>
+              </div>
             </Button>
             
             <p className="text-xs text-gray-500 text-center">
