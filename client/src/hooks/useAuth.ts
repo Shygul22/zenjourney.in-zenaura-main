@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { 
-  signInAnonymously, 
+  signInWithPopup,
+  GoogleAuthProvider,
   onAuthStateChanged, 
-  User 
+  User,
+  signOut as firebaseSignOut
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [dbUser, setDbUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,18 +20,40 @@ export const useAuth = () => {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-      if (user) {
-        setError(null);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      
+      if (firebaseUser) {
+        try {
+          // Register or get user from database
+          const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firebaseUid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName
+            })
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            setDbUser(userData);
+          }
+        } catch (err) {
+          console.error('Error registering user:', err);
+        }
+      } else {
+        setDbUser(null);
       }
+      
+      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const signInAnonymous = async () => {
+  const signInWithGoogle = async () => {
     if (!auth) {
       setError('Firebase not initialized');
       return;
@@ -36,12 +61,13 @@ export const useAuth = () => {
 
     try {
       setLoading(true);
-      const result = await signInAnonymously(auth);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
       setUser(result.user);
       setError(null);
     } catch (err: any) {
       setError(err.message);
-      console.error('Anonymous sign in failed:', err);
+      console.error('Google sign in failed:', err);
     } finally {
       setLoading(false);
     }
@@ -51,8 +77,9 @@ export const useAuth = () => {
     if (!auth) return;
     
     try {
-      await auth.signOut();
+      await firebaseSignOut(auth);
       setUser(null);
+      setDbUser(null);
     } catch (err: any) {
       setError(err.message);
       console.error('Sign out failed:', err);
@@ -61,9 +88,10 @@ export const useAuth = () => {
 
   return {
     user,
+    dbUser,
     loading,
     error,
-    signInAnonymous,
+    signInWithGoogle,
     signOut,
     isAuthenticated: !!user
   };
