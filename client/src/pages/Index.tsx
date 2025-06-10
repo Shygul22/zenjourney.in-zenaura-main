@@ -43,7 +43,7 @@ const Index = () => {
     updateTask, 
     deleteTask, 
     toggleTask, 
-    rescheduleTask, 
+    rescheduleTask: rescheduleFirebaseTask, 
     clearAllTasks 
   } = useFirebaseTasks(user?.uid);
   
@@ -140,7 +140,7 @@ const Index = () => {
     if (!user?.uid) return;
     
     try {
-      await rescheduleTask(taskId, newStart, newEnd);
+      await rescheduleFirebaseTask(taskId, newStart, newEnd);
       toast({
         title: "Task Rescheduled",
         description: "Task has been moved to the new time slot",
@@ -192,12 +192,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-gray-900 dark:to-gray-800">
-      <Header 
-        user={user} 
-        onSignOut={handleSignOut}
-        isMobileMenuOpen={isMobileMenuOpen}
-        setIsMobileMenuOpen={setIsMobileMenuOpen}
-      />
+      <Header />
       
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
