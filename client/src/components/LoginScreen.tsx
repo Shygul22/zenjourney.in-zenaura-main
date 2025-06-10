@@ -8,6 +8,7 @@ export const LoginScreen = () => {
   const { signInWithGoogle, loading, error } = useAuth();
   
   const isUnauthorizedDomain = error && error.includes('auth/unauthorized-domain');
+  const isOperationNotAllowed = error && error.includes('auth/operation-not-allowed');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -46,7 +47,7 @@ export const LoginScreen = () => {
 
           {error && (
             <div className={`p-3 border rounded-lg ${
-              isUnauthorizedDomain 
+              isUnauthorizedDomain || isOperationNotAllowed
                 ? 'bg-orange-50 border-orange-200' 
                 : 'bg-red-50 border-red-200'
             }`}>
@@ -66,6 +67,32 @@ export const LoginScreen = () => {
                       <li>Go to Firebase Console → Authentication → Settings</li>
                       <li>Add the domain above to "Authorized domains"</li>
                       <li>Refresh this page</li>
+                    </ol>
+                  </div>
+                  <a
+                    href="https://console.firebase.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1 text-orange-600 hover:text-orange-700 text-xs"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Open Firebase Console</span>
+                  </a>
+                </div>
+              ) : isOperationNotAllowed ? (
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 text-orange-600" />
+                    <p className="text-sm font-medium text-orange-800">Google Sign-in Not Enabled</p>
+                  </div>
+                  <div className="text-sm text-orange-700 space-y-2">
+                    <p>Enable Google authentication in your Firebase project:</p>
+                    <p>Steps:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-xs">
+                      <li>Go to Firebase Console → Authentication → Sign-in method</li>
+                      <li>Click on "Google" provider</li>
+                      <li>Toggle "Enable" and configure OAuth settings</li>
+                      <li>Save the changes and refresh this page</li>
                     </ol>
                   </div>
                   <a
