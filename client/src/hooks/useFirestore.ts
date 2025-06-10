@@ -66,45 +66,81 @@ export const useFirebaseTasks = (userId?: string) => {
       return;
     }
 
-    try {
-      const tasksRef = collection(db, 'tasks');
-      const q = query(
-        tasksRef, 
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc')
-      );
+    let unsubscribe: (() => void) | null = null;
 
-      const unsubscribe = onSnapshot(q, 
-        (snapshot) => {
-          const tasksData = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
-              scheduledStart: data.scheduledStart instanceof Timestamp ? data.scheduledStart.toDate() : 
-                             data.scheduledStart ? new Date(data.scheduledStart) : undefined,
-              scheduledEnd: data.scheduledEnd instanceof Timestamp ? data.scheduledEnd.toDate() : 
-                           data.scheduledEnd ? new Date(data.scheduledEnd) : undefined,
-            } as Task;
-          });
-          setTasks(tasksData);
-          setLoading(false);
-          setError(null);
-        },
-        (err) => {
-          console.error('Error fetching tasks:', err);
-          setError(err.message);
-          setLoading(false);
-        }
-      );
+    const setupListener = async () => {
+      try {
+        const tasksRef = collection(db, 'tasks');
+        const q = query(
+          tasksRef, 
+          where('userId', '==', userId),
+          orderBy('createdAt', 'desc')
+        );
 
-      return () => unsubscribe();
-    } catch (err: any) {
-      console.error('Error setting up tasks listener:', err);
-      setError(err.message);
-      setLoading(false);
-    }
+        unsubscribe = onSnapshot(q, 
+          (snapshot) => {
+            try {
+              const tasksData = snapshot.docs.map(doc => {
+                const data = doc.data();
+                
+                // Safe date parsing with fallbacks
+                const parseDate = (dateValue: any): Date => {
+                  if (dateValue instanceof Timestamp) {
+                    return dateValue.toDate();
+                  }
+                  if (dateValue && typeof dateValue === 'string') {
+                    const parsed = new Date(dateValue);
+                    return isNaN(parsed.getTime()) ? new Date() : parsed;
+                  }
+                  if (dateValue && typeof dateValue === 'number') {
+                    return new Date(dateValue);
+                  }
+                  return new Date();
+                };
+
+                return {
+                  id: doc.id,
+                  name: data.name || '',
+                  priority: data.priority || 1,
+                  effort: data.effort || 1,
+                  completed: data.completed || false,
+                  createdAt: parseDate(data.createdAt),
+                  priorityScore: data.priorityScore || 0,
+                  scheduledStart: data.scheduledStart ? parseDate(data.scheduledStart) : undefined,
+                  scheduledEnd: data.scheduledEnd ? parseDate(data.scheduledEnd) : undefined,
+                } as Task;
+              });
+              
+              setTasks(tasksData);
+              setLoading(false);
+              setError(null);
+            } catch (parseError) {
+              console.error('Error parsing task data:', parseError);
+              setError('Failed to parse task data');
+              setLoading(false);
+            }
+          },
+          (err) => {
+            console.error('Error fetching tasks:', err);
+            setError(`Failed to load tasks: ${err.message}`);
+            setLoading(false);
+          }
+        );
+      } catch (err: any) {
+        console.error('Error setting up tasks listener:', err);
+        setError(`Failed to setup data connection: ${err.message}`);
+        setLoading(false);
+      }
+    };
+
+    setupListener();
+
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [userId]);
 
   const addTask = async (name: string, priority: number, effort: number) => {
@@ -237,38 +273,71 @@ export const useFirebaseSettings = (userId?: string) => {
 
     // Demo mode - use localStorage
     if (userId.startsWith('demo-user-') || !db) {
-      const savedSettings = localStorage.getItem('zenjourney-demo-settings');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+      try {
+        const savedSettings = localStorage.getItem('zenjourney-demo-settings');
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          // Validate settings structure
+          if (parsed.startTime && parsed.endTime && typeof parsed.breakDuration === 'number') {
+            setSettings(parsed);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading demo settings:', err);
+        // Keep default settings
       }
       setLoading(false);
       return;
     }
 
-    // Firebase mode
-    try {
-      const settingsRef = doc(db, 'settings', userId);
-      const unsubscribe = onSnapshot(settingsRef, 
-        (doc) => {
-          if (doc.exists()) {
-            setSettings(doc.data() as WorkdaySettings);
-          }
-          setLoading(false);
-          setError(null);
-        },
-        (err) => {
-          console.error('Error fetching settings:', err);
-          setError(err.message);
-          setLoading(false);
-        }
-      );
+    let unsubscribe: (() => void) | null = null;
 
-      return () => unsubscribe();
-    } catch (err: any) {
-      console.error('Error setting up settings listener:', err);
-      setError(err.message);
-      setLoading(false);
-    }
+    // Firebase mode
+    const setupListener = async () => {
+      try {
+        const settingsRef = doc(db, 'settings', userId);
+        unsubscribe = onSnapshot(settingsRef, 
+          (doc) => {
+            try {
+              if (doc.exists()) {
+                const data = doc.data();
+                // Validate settings data
+                const validatedSettings: WorkdaySettings = {
+                  startTime: data.startTime || '09:00',
+                  endTime: data.endTime || '17:00',
+                  breakDuration: typeof data.breakDuration === 'number' ? data.breakDuration : 30
+                };
+                setSettings(validatedSettings);
+              }
+              setLoading(false);
+              setError(null);
+            } catch (parseError) {
+              console.error('Error parsing settings data:', parseError);
+              setError('Failed to parse settings data');
+              setLoading(false);
+            }
+          },
+          (err) => {
+            console.error('Error fetching settings:', err);
+            setError(`Failed to load settings: ${err.message}`);
+            setLoading(false);
+          }
+        );
+      } catch (err: any) {
+        console.error('Error setting up settings listener:', err);
+        setError(`Failed to setup settings connection: ${err.message}`);
+        setLoading(false);
+      }
+    };
+
+    setupListener();
+
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [userId]);
 
   const updateSettings = async (newSettings: WorkdaySettings) => {

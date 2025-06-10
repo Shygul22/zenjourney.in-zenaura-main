@@ -5,12 +5,19 @@ import {
   onAuthStateChanged, 
   User,
   signOut as firebaseSignOut,
-  Auth
+  Auth,
+  AuthError
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
+interface DemoUser {
+  uid: string;
+  email: string;
+  displayName: string;
+}
+
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | DemoUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,12 +27,31 @@ export const useAuth = () => {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth as Auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      setLoading(false);
-    });
+    let unsubscribe: (() => void) | null = null;
 
-    return () => unsubscribe();
+    try {
+      unsubscribe = onAuthStateChanged(auth as Auth, 
+        (firebaseUser) => {
+          setUser(firebaseUser);
+          setLoading(false);
+          setError(null);
+        },
+        (err) => {
+          console.error('Auth state change error:', err);
+          setError('Authentication connection failed');
+          setLoading(false);
+        }
+      );
+    } catch (err) {
+      console.error('Failed to setup auth listener:', err);
+      setLoading(false);
+    }
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const signInWithGoogle = async () => {
@@ -38,23 +64,45 @@ export const useAuth = () => {
       setLoading(true);
       setError(null);
       const provider = new GoogleAuthProvider();
+      
+      // Add additional scopes for better user info
+      provider.addScope('email');
+      provider.addScope('profile');
+      
       const result = await signInWithPopup(auth as Auth, provider);
       setUser(result.user);
-    } catch (err: any) {
+    } catch (err) {
+      const authError = err as AuthError;
       let errorMessage = 'Sign-in failed. Please try again.';
       
-      if (err.code === 'auth/api-key-not-valid') {
-        errorMessage = 'Firebase configuration issue. Please use demo mode or contact support.';
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'Sign-in was cancelled.';
-      } else if (err.code === 'auth/operation-not-allowed') {
-        errorMessage = 'Google sign-in is not enabled. Please use demo mode.';
-      } else if (err.code === 'auth/unauthorized-domain') {
-        errorMessage = 'This domain needs to be authorized in Firebase. Please use demo mode or add this domain to your Firebase project.';
+      switch (authError.code) {
+        case 'auth/api-key-not-valid':
+          errorMessage = 'Firebase configuration issue. Please use demo mode or contact support.';
+          break;
+        case 'auth/popup-closed-by-user':
+          errorMessage = 'Sign-in was cancelled.';
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = 'Google sign-in is not enabled. Please use demo mode.';
+          break;
+        case 'auth/unauthorized-domain':
+          errorMessage = 'This domain needs to be authorized in Firebase. Please use demo mode or add this domain to your Firebase project.';
+          break;
+        case 'auth/popup-blocked':
+          errorMessage = 'Sign-in popup was blocked. Please allow popups and try again.';
+          break;
+        case 'auth/cancelled-popup-request':
+          errorMessage = 'Sign-in was cancelled.';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection and try again.';
+          break;
+        default:
+          errorMessage = `Sign-in failed: ${authError.message}`;
       }
       
       setError(errorMessage);
-      console.error('Google sign in failed:', err);
+      console.error('Google sign in failed:', authError);
     } finally {
       setLoading(false);
     }
@@ -63,37 +111,41 @@ export const useAuth = () => {
   const signInDemo = async () => {
     try {
       setLoading(true);
+      setError(null);
       
       // Create a demo user for local development
-      const demoUser = {
+      const demoUser: DemoUser = {
         uid: 'demo-user-' + Date.now(),
         email: 'demo@zenjourney.app',
         displayName: 'Demo User'
       };
       
-      setUser(demoUser as any);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-      console.error('Demo sign in failed:', err);
+      setUser(demoUser);
+    } catch (err) {
+      const error = err as Error;
+      setError(`Demo sign-in failed: ${error.message}`);
+      console.error('Demo sign in failed:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const signOut = async () => {
-    if (!auth) {
-      // Demo mode logout
-      setUser(null);
-      return;
-    }
-    
     try {
+      setError(null);
+      
+      if (!auth || (user && 'uid' in user && user.uid.startsWith('demo-user-'))) {
+        // Demo mode logout
+        setUser(null);
+        return;
+      }
+      
       await firebaseSignOut(auth as Auth);
       setUser(null);
-    } catch (err: any) {
-      setError(err.message);
-      console.error('Sign out failed:', err);
+    } catch (err) {
+      const error = err as Error;
+      setError(`Sign-out failed: ${error.message}`);
+      console.error('Sign out failed:', error);
     }
   };
 

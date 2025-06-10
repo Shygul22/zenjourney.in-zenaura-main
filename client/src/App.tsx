@@ -6,6 +6,7 @@ import { Router, Route, Switch } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { useAuth } from "./hooks/useAuth";
 import { LoginScreen } from "./components/LoginScreen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -29,23 +30,27 @@ const App = () => {
   }
 
   return (
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <Router>
-        <Switch>
-          <Route path="/" component={Index} />
-          <Route component={NotFound} />
-        </Switch>
-      </Router>
-    </TooltipProvider>
+    <ErrorBoundary>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <Router>
+          <Switch>
+            <Route path="/" component={Index} />
+            <Route component={NotFound} />
+          </Switch>
+        </Router>
+      </TooltipProvider>
+    </ErrorBoundary>
   );
 };
 
 const AppWrapper = () => (
-  <QueryClientProvider client={queryClient}>
-    <App />
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default AppWrapper;
