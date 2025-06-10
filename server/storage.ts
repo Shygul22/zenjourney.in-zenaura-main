@@ -27,16 +27,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.firebaseUid, firebaseUid));
-    return user || undefined;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.firebaseUid, firebaseUid));
+      return user || undefined;
+    } catch (error) {
+      console.error('Database error in getUserByFirebaseUid:', error);
+      throw error;
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(insertUser)
-      .returning();
-    return user;
+    try {
+      const [user] = await db
+        .insert(users)
+        .values(insertUser)
+        .returning();
+      return user;
+    } catch (error) {
+      console.error('Database error in createUser:', error);
+      throw error;
+    }
   }
 
   async getUserTasks(userId: number): Promise<Task[]> {
