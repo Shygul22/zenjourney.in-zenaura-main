@@ -29,6 +29,11 @@ export const TimeBlocking: React.FC<TimeBlockingProps> = ({
     const workdayEnd = new Date();
     workdayEnd.setHours(endHour, endMinute, 0, 0);
     
+    // Handle overnight shifts (end time before start time)
+    if (workdayEnd <= workdayStart) {
+      workdayEnd.setDate(workdayEnd.getDate() + 1);
+    }
+    
     const totalWorkdayMinutes = (workdayEnd.getTime() - workdayStart.getTime()) / (1000 * 60);
     
     let currentTime = new Date(workdayStart);

@@ -458,6 +458,9 @@ export const useFirebaseSettings = (userId?: string) => {
 };
 
 const calculatePriorityScore = (priority: number, effort: number, createdAt: Date): number => {
+  // Add validation to prevent NaN values
+  if (!priority || !effort || !createdAt) return 0;
+  if (typeof priority !== 'number' || typeof effort !== 'number') return 0;
   const daysSinceCreated = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
   const urgencyMultiplier = 1 + (daysSinceCreated * 0.1);
   const efficiencyScore = priority / Math.max(effort, 1);

@@ -31,14 +31,19 @@ export const TaskList: React.FC<TaskListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     if (newTaskName.trim()) {
       setIsAddingTask(true);
-      onAddTask(newTaskName.trim(), newTaskPriority, newTaskEffort);
-      setNewTaskName('');
-      setNewTaskPriority(3);
-      setNewTaskEffort(2);
-      setTimeout(() => setIsAddingTask(false), 300);
+      try {
+        await onAddTask(newTaskName.trim(), newTaskPriority, newTaskEffort);
+        setNewTaskName('');
+        setNewTaskPriority(3);
+        setNewTaskEffort(2);
+      } catch (error) {
+        console.error('Failed to add task:', error);
+      } finally {
+        setTimeout(() => setIsAddingTask(false), 300);
+      }
     }
   };
 
