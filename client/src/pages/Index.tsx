@@ -3,11 +3,13 @@ import { TaskList } from '../components/TaskList';
 import { TimeBlocking } from '../components/TimeBlocking';
 import { Settings } from '../components/Settings';
 import { Header } from '../components/Header';
+import { UserProfileCard } from '../components/UserProfile';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '../hooks/useAuth';
 import { useFirebaseTasks, useFirebaseSettings } from '../hooks/useFirestore';
+import { useFirebaseProfile } from '../hooks/useFirebaseProfile';
 import { CheckSquare, Calendar, Settings as SettingsIcon, Menu, X, LogOut } from 'lucide-react';
 
 export interface Task {
@@ -36,9 +38,16 @@ const Index = () => {
   
   // Firebase hooks
   const { 
+    profile,
+    loading: profileLoading,
+    updateStats
+  } = useFirebaseProfile(user);
+  
+  const { 
     tasks, 
     loading: tasksLoading, 
     error: tasksError, 
+    syncStatus,
     addTask, 
     updateTask, 
     deleteTask, 
@@ -53,13 +62,19 @@ const Index = () => {
     updateSettings 
   } = useFirebaseSettings(user?.uid);
 
-  const isLoading = tasksLoading || settingsLoading;
+  const isLoading = tasksLoading || settingsLoading || profileLoading;
 
   const handleAddTask = async (name: string, priority: number, effort: number) => {
     if (!user?.uid) return;
     
     try {
       await addTask(name, priority, effort);
+      // Update user stats
+      if (updateStats) {
+        await updateStats({ 
+          totalTasks: (profile?.stats.totalTasks || 0) + 1 
+        });
+      }
       toast({
         title: "Task Added",
         description: `"${name}" has been added to your task list`,
@@ -82,6 +97,12 @@ const Index = () => {
       await toggleTask(id);
       
       if (task && !task.completed) {
+        // Update user stats
+        if (updateStats) {
+          await updateStats({ 
+            completedTasks: (profile?.stats.completedTasks || 0) + 1 
+          });
+        }
         toast({
           title: "Task Completed",
           description: `Great job completing "${task.name}"!`,

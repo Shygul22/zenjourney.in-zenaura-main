@@ -363,7 +363,7 @@ export const useFirebaseSettings = (userId?: string) => {
           throw new Error('Database not initialized');
         }
         
-        const settingsRef = doc(db, 'settings', userId);
+        const settingsRef = doc(db, 'users', userId, 'settings', 'workday');
         unsubscribe = onSnapshot(settingsRef, 
           (doc) => {
             try {
@@ -444,7 +444,7 @@ export const useFirebaseSettings = (userId?: string) => {
         throw new Error('Database not initialized');
       }
       
-      const settingsRef = doc(db, 'settings', userId);
+      const settingsRef = doc(db, 'users', userId, 'settings', 'workday');
       await setDoc(settingsRef, newSettings, { merge: true });
     } catch (err) {
       const error = err as Error;

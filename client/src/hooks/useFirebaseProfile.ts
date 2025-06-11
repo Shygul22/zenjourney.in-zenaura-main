@@ -7,6 +7,12 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
+
+interface DemoUser {
+  uid: string;
+  email: string;
+  displayName: string;
+}
 import { db } from '../lib/firebase';
 
 export interface UserProfile {
@@ -28,7 +34,7 @@ export interface UserProfile {
   };
 }
 
-export const useFirebaseProfile = (user: User | null) => {
+export const useFirebaseProfile = (user: User | DemoUser | null) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,22 +46,50 @@ export const useFirebaseProfile = (user: User | null) => {
       return;
     }
 
+    // Skip Firebase profile for demo users
+    if ('uid' in user && user.uid.startsWith('demo-user-')) {
+      const demoProfile: UserProfile = {
+        uid: user.uid,
+        email: user.email || 'demo@zenjourney.app',
+        displayName: user.displayName || 'Demo User',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+        preferences: {
+          theme: 'system',
+          notifications: true,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        },
+        stats: {
+          totalTasks: 0,
+          completedTasks: 0,
+          totalWorkDays: 0
+        }
+      };
+      setProfile(demoProfile);
+      setLoading(false);
+      return;
+    }
+
     let unsubscribe: (() => void) | null = null;
 
     const setupProfileListener = async () => {
       try {
-        const profileRef = doc(db, 'users', user.uid);
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const profileRef = doc(db!, 'users', user.uid);
         
         // Check if profile exists, create if not
         const profileDoc = await getDoc(profileRef);
         
         if (!profileDoc.exists()) {
           // Create new user profile
+          const firebaseUser = user as User;
           const newProfile: Omit<UserProfile, 'createdAt' | 'lastLoginAt'> = {
-            uid: user.uid,
-            email: user.email || '',
-            displayName: user.displayName || 'User',
-            photoURL: user.photoURL || undefined,
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || 'User',
+            photoURL: firebaseUser.photoURL || undefined,
             preferences: {
               theme: 'system',
               notifications: true,
@@ -135,8 +169,16 @@ export const useFirebaseProfile = (user: User | null) => {
       throw new Error('User not authenticated or database not available');
     }
 
+    // Skip Firebase updates for demo users
+    if ('uid' in user && user.uid.startsWith('demo-user-')) {
+      if (profile) {
+        setProfile({ ...profile, ...updates });
+      }
+      return;
+    }
+
     try {
-      const profileRef = doc(db, 'users', user.uid);
+      const profileRef = doc(db!, 'users', user.uid);
       await setDoc(profileRef, updates, { merge: true });
     } catch (err: any) {
       throw new Error(`Failed to update profile: ${err.message}`);
