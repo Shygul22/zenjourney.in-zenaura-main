@@ -4,6 +4,7 @@ import { TimeBlocking } from '../components/TimeBlocking';
 import { Settings } from '../components/Settings';
 import { Header } from '../components/Header';
 import { UserProfileCard } from '../components/UserProfile';
+import { DataMigration } from '../components/DataMigration';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -41,7 +42,7 @@ const Index = () => {
     profile,
     loading: profileLoading,
     updateStats
-  } = useFirebaseProfile(user);
+  } = useFirebaseProfile(user as any);
   
   const { 
     tasks, 
@@ -195,6 +196,68 @@ const Index = () => {
     }
   };
 
+  const handleMigrateToFirebase = async () => {
+    if (!user?.uid || !user.uid.startsWith('demo-user-')) {
+      toast({
+        title: "Migration Not Available",
+        description: "Migration is only available for demo accounts.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Get local storage data
+      const localTasks = JSON.parse(localStorage.getItem('zenjourney-demo-tasks') || '[]');
+      const localSettings = JSON.parse(localStorage.getItem('zenjourney-demo-settings') || '{}');
+      
+      if (localTasks.length === 0) {
+        toast({
+          title: "No Data to Migrate",
+          description: "No local tasks found to migrate.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Would require user to sign in with Google first
+      toast({
+        title: "Migration Requires Firebase Account",
+        description: "Please sign in with Google to migrate your data to Firebase.",
+        variant: "destructive"
+      });
+    } catch (error) {
+      console.error('Migration error:', error);
+      toast({
+        title: "Migration Failed",
+        description: "Failed to migrate data. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleExportData = async () => {
+    const data = {
+      tasks: tasks,
+      settings: settings,
+      profile: profile,
+      exportDate: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `zenjourney-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Check if user has local data
+  const hasLocalData = user?.uid?.startsWith('demo-user-') && tasks.length > 0;
+
   const handleSignOut = async () => {
     await signOut();
     toast({
@@ -221,6 +284,11 @@ const Index = () => {
       
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
+          {/* User Profile Section */}
+          <div className="mb-6">
+            <UserProfileCard profile={profile} syncStatus={syncStatus} />
+          </div>
+
           {/* Desktop Navigation */}
           <div className="hidden md:block mb-8">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -258,10 +326,19 @@ const Index = () => {
               </TabsContent>
               
               <TabsContent value="settings" className="mt-6">
-                <Settings
-                  settings={settings}
-                  onUpdateSettings={handleUpdateSettings}
-                />
+                <div className="space-y-6">
+                  <Settings
+                    settings={settings}
+                    onUpdateSettings={handleUpdateSettings}
+                  />
+                  
+                  <DataMigration
+                    onMigrateToFirebase={handleMigrateToFirebase}
+                    onExportData={handleExportData}
+                    hasLocalData={hasLocalData}
+                    isFirebaseConnected={!user?.uid?.startsWith('demo-user-')}
+                  />
+                </div>
               </TabsContent>
             </Tabs>
           </div>

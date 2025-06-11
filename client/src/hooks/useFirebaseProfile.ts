@@ -12,6 +12,7 @@ interface DemoUser {
   uid: string;
   email: string;
   displayName: string;
+  photoURL?: string;
 }
 import { db } from '../lib/firebase';
 
@@ -77,7 +78,7 @@ export const useFirebaseProfile = (user: User | DemoUser | null) => {
         if (!db) {
           throw new Error('Database not initialized');
         }
-        const profileRef = doc(db!, 'users', user.uid);
+        const profileRef = doc(db, 'users', user.uid);
         
         // Check if profile exists, create if not
         const profileDoc = await getDoc(profileRef);
@@ -178,7 +179,7 @@ export const useFirebaseProfile = (user: User | DemoUser | null) => {
     }
 
     try {
-      const profileRef = doc(db!, 'users', user.uid);
+      const profileRef = doc(db, 'users', user.uid);
       await setDoc(profileRef, updates, { merge: true });
     } catch (err: any) {
       throw new Error(`Failed to update profile: ${err.message}`);
