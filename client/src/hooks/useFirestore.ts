@@ -20,6 +20,7 @@ export const useFirebaseTasks = (userId?: string) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
 
   // localStorage helper functions for demo mode
   const loadTasksFromLocalStorage = () => {
@@ -74,10 +75,10 @@ export const useFirebaseTasks = (userId?: string) => {
           throw new Error('Database not initialized');
         }
         
-        const tasksRef = collection(db, 'tasks');
+        // Use subcollection for better data organization
+        const userTasksRef = collection(db, 'users', userId, 'tasks');
         const q = query(
-          tasksRef, 
-          where('userId', '==', userId),
+          userTasksRef, 
           orderBy('createdAt', 'desc')
         );
 
@@ -174,13 +175,12 @@ export const useFirebaseTasks = (userId?: string) => {
       return;
     }
     
-    // Firebase mode
+    // Firebase mode - store in user subcollection
     const taskData = {
       name: name.trim(),
       priority,
       effort,
       completed: false,
-      userId,
       createdAt: serverTimestamp(),
       priorityScore,
     };
@@ -190,7 +190,9 @@ export const useFirebaseTasks = (userId?: string) => {
         throw new Error('Database not initialized');
       }
       
-      await addDoc(collection(db, 'tasks'), taskData);
+      setSyncStatus('syncing');
+      await addDoc(collection(db, 'users', userId, 'tasks'), taskData);
+      setSyncStatus('synced');
     } catch (err) {
       const error = err as Error;
       throw new Error(`Failed to save task: ${error.message}`);
@@ -220,7 +222,7 @@ export const useFirebaseTasks = (userId?: string) => {
         throw new Error('Database not initialized');
       }
       
-      const taskRef = doc(db, 'tasks', id);
+      const taskRef = doc(db, 'users', userId, 'tasks', id);
       const cleanUpdates = Object.fromEntries(
         Object.entries(updates).filter(([_, value]) => value !== undefined)
       );
@@ -252,7 +254,7 @@ export const useFirebaseTasks = (userId?: string) => {
         throw new Error('Database not initialized');
       }
       
-      await deleteDoc(doc(db, 'tasks', id));
+      await deleteDoc(doc(db, 'users', userId, 'tasks', id));
     } catch (err) {
       const error = err as Error;
       throw new Error(`Failed to delete task: ${error.message}`);
@@ -291,7 +293,7 @@ export const useFirebaseTasks = (userId?: string) => {
       
       const deletePromises = tasks.map(task => {
         if (!db) return Promise.resolve(null);
-        return deleteDoc(doc(db, 'tasks', task.id)).catch(err => {
+        return deleteDoc(doc(db, 'users', userId, 'tasks', task.id)).catch(err => {
           console.error(`Failed to delete task ${task.id}:`, err);
           return null; // Continue with other deletions
         });
@@ -308,6 +310,7 @@ export const useFirebaseTasks = (userId?: string) => {
     tasks,
     loading,
     error,
+    syncStatus,
     addTask,
     updateTask,
     deleteTask,
