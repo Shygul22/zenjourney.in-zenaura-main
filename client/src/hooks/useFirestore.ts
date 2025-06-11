@@ -149,11 +149,9 @@ export const useFirebaseTasks = (userId?: string) => {
 
   const addTask = async (name: string, priority: number, effort: number) => {
     if (!userId) throw new Error('User not authenticated');
-    
-    // Validate inputs
     if (!name?.trim()) throw new Error('Task name is required');
     if (priority < 1 || priority > 5) throw new Error('Priority must be between 1 and 5');
-    if (effort < 1 || effort > 5) throw new Error('Effort must be between 1 and 5');
+    if (effort < 1 || effort > 8) throw new Error('Effort must be between 1 and 8');
     
     const createdAt = new Date();
     const priorityScore = calculatePriorityScore(priority, effort, createdAt);
@@ -291,12 +289,13 @@ export const useFirebaseTasks = (userId?: string) => {
         throw new Error('Database not initialized');
       }
       
-      const deletePromises = tasks.map(task => 
-        deleteDoc(doc(db, 'tasks', task.id)).catch(err => {
+      const deletePromises = tasks.map(task => {
+        if (!db) return Promise.resolve(null);
+        return deleteDoc(doc(db, 'tasks', task.id)).catch(err => {
           console.error(`Failed to delete task ${task.id}:`, err);
           return null; // Continue with other deletions
-        })
-      );
+        });
+      });
       
       await Promise.allSettled(deletePromises);
     } catch (err) {

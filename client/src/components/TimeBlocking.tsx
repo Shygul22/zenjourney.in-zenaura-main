@@ -35,8 +35,8 @@ export const TimeBlocking: React.FC<TimeBlockingProps> = ({
     const scheduledTasks: (Task & { scheduledStart: Date; scheduledEnd: Date })[] = [];
     
     for (const task of sortedTasks) {
-      const taskDurationMinutes = task.effort * 60;
-      const taskEnd = new Date(currentTime.getTime() + taskDurationMinutes * 60 * 1000);
+      const taskDurationMinutes = task.effort * 60; // effort is in hours, convert to minutes
+      const taskEnd = new Date(currentTime.getTime() + taskDurationMinutes * 60 * 1000); // convert minutes to milliseconds
       
       if (taskEnd <= workdayEnd) {
         scheduledTasks.push({
