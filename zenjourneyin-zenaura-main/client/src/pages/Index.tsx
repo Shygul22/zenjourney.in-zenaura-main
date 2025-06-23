@@ -23,6 +23,9 @@ export interface Task {
   priorityScore: number;
   scheduledStart?: Date;
   scheduledEnd?: Date;
+  notes?: string;
+  dueDate?: Date | null;
+  tags?: string[];
 }
 
 export interface WorkdaySettings {
@@ -44,6 +47,16 @@ const Index = () => {
     updateStats
   } = useFirebaseProfile(user as any);
   
+  // Define AddTaskData interface, mirroring the one in useFirebaseTasks and TaskList
+  interface AddTaskData {
+    name: string;
+    priority: number;
+    effort: number;
+    notes?: string;
+    dueDate?: Date | null;
+    tags?: string[];
+  }
+
   const { 
     tasks, 
     loading: tasksLoading, 
@@ -65,11 +78,11 @@ const Index = () => {
 
   const isLoading = tasksLoading || settingsLoading || profileLoading;
 
-  const handleAddTask = async (name: string, priority: number, effort: number) => {
+  const handleAddTask = async (data: AddTaskData) => { // Updated signature
     if (!user?.uid) return;
     
     try {
-      await addTask(name, priority, effort);
+      await addTask(data); // Pass the whole data object
       // Update user stats
       if (updateStats) {
         await updateStats({ 
@@ -78,7 +91,7 @@ const Index = () => {
       }
       toast({
         title: "Task Added",
-        description: `"${name}" has been added to your task list`,
+        description: `"${data.name}" has been added to your task list`,
       });
     } catch (error) {
       console.error('Error adding task:', error);
