@@ -32,6 +32,9 @@ export const useFirebaseTasks = (userId?: string) => {
           createdAt: new Date(task.createdAt),
           scheduledStart: task.scheduledStart ? new Date(task.scheduledStart) : undefined,
           scheduledEnd: task.scheduledEnd ? new Date(task.scheduledEnd) : undefined,
+          notes: task.notes || undefined,
+          dueDate: task.dueDate ? new Date(task.dueDate) : null,
+          tags: Array.isArray(task.tags) ? task.tags : [],
         }));
         setTasks(parsedTasks);
       } else {
@@ -113,6 +116,9 @@ export const useFirebaseTasks = (userId?: string) => {
                   priorityScore: data.priorityScore || 0,
                   scheduledStart: data.scheduledStart ? parseDate(data.scheduledStart) : undefined,
                   scheduledEnd: data.scheduledEnd ? parseDate(data.scheduledEnd) : undefined,
+                  notes: data.notes || undefined,
+                  dueDate: data.dueDate ? parseDate(data.dueDate) : null,
+                  tags: Array.isArray(data.tags) ? data.tags : [],
                 } as Task;
               });
               
@@ -148,23 +154,35 @@ export const useFirebaseTasks = (userId?: string) => {
     };
   }, [userId]);
 
-  const addTask = async (name: string, priority: number, effort: number) => {
+  interface AddTaskData {
+    name: string;
+    priority: number;
+    effort: number;
+    notes?: string;
+    dueDate?: Date | null;
+    tags?: string[];
+  }
+
+  const addTask = async (data: AddTaskData) => {
     if (!userId) throw new Error('User not authenticated');
-    if (!name?.trim()) throw new Error('Task name is required');
-    if (priority < 1 || priority > 5) throw new Error('Priority must be between 1 and 5');
-    if (effort < 1 || effort > 8) throw new Error('Effort must be between 1 and 8');
+    if (!data.name?.trim()) throw new Error('Task name is required');
+    if (data.priority < 1 || data.priority > 5) throw new Error('Priority must be between 1 and 5');
+    if (data.effort < 0.5 || data.effort > 8) throw new Error('Effort must be between 0.5 and 8'); // Adjusted min effort
     
     const createdAt = new Date();
-    const priorityScore = calculatePriorityScore(priority, effort, createdAt);
+    const priorityScore = calculatePriorityScore(data.priority, data.effort, createdAt);
     
     const newTask: Task = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      priority,
-      effort,
+      id: Date.now().toString(), // For demo mode, Firebase will generate its own ID
+      name: data.name.trim(),
+      priority: data.priority,
+      effort: data.effort,
       completed: false,
       createdAt,
       priorityScore,
+      notes: data.notes || undefined,
+      dueDate: data.dueDate || null,
+      tags: data.tags || [],
     };
 
     // Demo mode - use localStorage
@@ -176,13 +194,16 @@ export const useFirebaseTasks = (userId?: string) => {
     }
     
     // Firebase mode - store in user subcollection
-    const taskData = {
-      name: name.trim(),
-      priority,
-      effort,
+    const taskDataForFirebase: any = {
+      name: data.name.trim(),
+      priority: data.priority,
+      effort: data.effort,
       completed: false,
       createdAt: serverTimestamp(),
       priorityScore,
+      notes: data.notes || null, // Store null if undefined for consistency
+      dueDate: data.dueDate ? Timestamp.fromDate(data.dueDate) : null,
+      tags: data.tags || [],
     };
     
     try {
@@ -223,9 +244,27 @@ export const useFirebaseTasks = (userId?: string) => {
       }
       
       const taskRef = doc(db, 'users', userId, 'tasks', id);
+
+      // Prepare updates, converting Date to Timestamp for Firebase
+      const updatesForFirebase = { ...updates };
+      if (updates.dueDate !== undefined) { // Handles null or a Date object
+        updatesForFirebase.dueDate = updates.dueDate ? Timestamp.fromDate(updates.dueDate) : null;
+      }
+      // Ensure other Date fields if they were part of updates are also converted
+      if (updates.scheduledStart && updates.scheduledStart instanceof Date) {
+        updatesForFirebase.scheduledStart = Timestamp.fromDate(updates.scheduledStart);
+      }
+      if (updates.scheduledEnd && updates.scheduledEnd instanceof Date) {
+        updatesForFirebase.scheduledEnd = Timestamp.fromDate(updates.scheduledEnd);
+      }
+      if (updates.createdAt && updates.createdAt instanceof Date) { // Should not typically be updated, but good practice
+        updatesForFirebase.createdAt = Timestamp.fromDate(updates.createdAt);
+      }
+
       const cleanUpdates = Object.fromEntries(
-        Object.entries(updates).filter(([_, value]) => value !== undefined)
+        Object.entries(updatesForFirebase).filter(([_, value]) => value !== undefined)
       );
+
       await updateDoc(taskRef, cleanUpdates);
     } catch (err) {
       const error = err as Error;

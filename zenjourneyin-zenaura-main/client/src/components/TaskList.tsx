@@ -9,9 +9,20 @@ import { Badge } from '@/components/ui/badge';
 import { Trash2, Plus, CheckCircle, Circle, Clock, TrendingUp, Filter, Search, AlertCircle } from 'lucide-react';
 import { Task } from '../pages/Index';
 
+import { Task } from '../pages/Index';
+
+interface AddTaskData { // Mirrored from useFirebaseTasks for clarity, can be imported
+  name: string;
+  priority: number;
+  effort: number;
+  notes?: string;
+  dueDate?: Date | null;
+  tags?: string[];
+}
+
 interface TaskListProps {
   tasks: Task[];
-  onAddTask: (name: string, priority: number, effort: number) => void;
+  onAddTask: (data: AddTaskData) => Promise<void>; // Updated signature
   onToggleTask: (id: string) => void;
   onDeleteTask: (id: string) => void;
   onClearAll: () => void;
@@ -26,7 +37,11 @@ export const TaskList: React.FC<TaskListProps> = ({
 }) => {
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState(3);
-  const [newTaskEffort, setNewTaskEffort] = useState(2);
+  const [newTaskEffort, setNewTaskEffort] = useState(0.5); // Default to min effort
+  const [newTaskNotes, setNewTaskNotes] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>(''); // Store as string for input field
+  const [newTaskTags, setNewTaskTags] = useState(''); // Comma-separated string
+
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -34,11 +49,22 @@ export const TaskList: React.FC<TaskListProps> = ({
   const handleAddTask = async () => {
     if (newTaskName.trim()) {
       setIsAddingTask(true);
+      const taskData: AddTaskData = {
+        name: newTaskName.trim(),
+        priority: newTaskPriority,
+        effort: newTaskEffort,
+        notes: newTaskNotes.trim() || undefined,
+        dueDate: newTaskDueDate ? new Date(newTaskDueDate) : null,
+        tags: newTaskTags.split(',').map(tag => tag.trim()).filter(tag => tag),
+      };
       try {
-        await onAddTask(newTaskName.trim(), newTaskPriority, newTaskEffort);
+        await onAddTask(taskData);
         setNewTaskName('');
         setNewTaskPriority(3);
-        setNewTaskEffort(2);
+        setNewTaskEffort(0.5);
+        setNewTaskNotes('');
+        setNewTaskDueDate('');
+        setNewTaskTags('');
       } catch (error) {
         console.error('Failed to add task:', error);
       } finally {
@@ -134,6 +160,46 @@ export const TaskList: React.FC<TaskListProps> = ({
             <p id="taskName-help" className="text-xs text-gray-500">
               Be specific about what you want to accomplish
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="taskNotes" className="text-sm font-medium">
+              Notes (Optional)
+            </Label>
+            <Input
+              id="taskNotes"
+              value={newTaskNotes}
+              onChange={(e) => setNewTaskNotes(e.target.value)}
+              placeholder="Add any details or context..."
+              className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="taskDueDate" className="text-sm font-medium">
+                Due Date (Optional)
+              </Label>
+              <Input
+                id="taskDueDate"
+                type="date"
+                value={newTaskDueDate}
+                onChange={(e) => setNewTaskDueDate(e.target.value)}
+                className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="taskTags" className="text-sm font-medium">
+                Tags (Optional, comma-separated)
+              </Label>
+              <Input
+                id="taskTags"
+                value={newTaskTags}
+                onChange={(e) => setNewTaskTags(e.target.value)}
+                placeholder="e.g., work, personal, urgent"
+                className="w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -342,6 +408,15 @@ export const TaskList: React.FC<TaskListProps> = ({
                           <span>Score: {Math.round(task.priorityScore)}</span>
                         </div>
 
+                        {task.dueDate && (
+                          <div className={`flex items-center space-x-1 text-xs sm:text-sm ${
+                            !task.completed && task.dueDate < new Date() ? 'text-red-600 font-semibold' : 'text-gray-600'
+                          }`}>
+                            <Clock className="w-3 h-3" />
+                            <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                          </div>
+                        )}
+
                         {task.priority >= 4 && !task.completed && (
                           <div className="flex items-center space-x-1 text-xs text-red-600">
                             <AlertCircle className="w-3 h-3" />
@@ -349,6 +424,21 @@ export const TaskList: React.FC<TaskListProps> = ({
                           </div>
                         )}
                       </div>
+
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {task.tags.map(tag => (
+                            <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0.5">{tag}</Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      {task.notes && (
+                        <div className="mt-2 text-xs text-gray-500 flex items-center">
+                          <AlertCircle className="w-3 h-3 mr-1 text-blue-500" /> {/* Using AlertCircle as a placeholder icon for notes */}
+                          <span>Has notes</span>
+                        </div>
+                      )}
                     </div>
                     
                     <Button
