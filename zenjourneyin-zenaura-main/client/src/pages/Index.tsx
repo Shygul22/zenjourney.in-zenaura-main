@@ -26,6 +26,14 @@ export interface Task {
   notes?: string;
   dueDate?: Date | null;
   tags?: string[];
+  subtasks?: Subtask[]; // For client-side state
+}
+
+export interface Subtask {
+  id: string;
+  name: string;
+  completed: boolean;
+  createdAt: Date; // Or Timestamp for Firestore consistency, then convert
 }
 
 export interface WorkdaySettings {
@@ -322,6 +330,7 @@ const Index = () => {
               
               <TabsContent value="tasks" className="mt-6">
                 <TaskList
+                  userId={user?.uid}
                   tasks={tasks}
                   onAddTask={handleAddTask}
                   onToggleTask={handleToggleTask}
@@ -387,6 +396,7 @@ const Index = () => {
 
             {activeTab === 'tasks' && (
               <TaskList
+                userId={user?.uid}
                 tasks={tasks}
                 onAddTask={handleAddTask}
                 onToggleTask={handleToggleTask}
