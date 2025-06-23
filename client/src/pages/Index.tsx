@@ -24,6 +24,17 @@ export interface Task {
   priorityScore: number;
   scheduledStart?: Date;
   scheduledEnd?: Date;
+  notes?: string;
+  dueDate?: Date | null;
+  tags?: string[];
+  subtasks?: Subtask[]; // For client-side state
+}
+
+export interface Subtask {
+  id: string;
+  name: string;
+  completed: boolean;
+  createdAt: Date;
 }
 
 export interface WorkdaySettings {
@@ -44,6 +55,16 @@ const Index = () => {
     updateStats
   } = useFirebaseProfile(user as any);
   
+  // Define AddTaskData interface, mirroring the one in useFirebaseTasks and TaskList
+  interface AddTaskData {
+    name: string;
+    priority: number;
+    effort: number;
+    notes?: string;
+    dueDate?: Date | null;
+    tags?: string[];
+  }
+
   const { 
     tasks, 
     loading: tasksLoading, 
@@ -65,11 +86,11 @@ const Index = () => {
 
   const isLoading = tasksLoading || settingsLoading || profileLoading;
 
-  const handleAddTask = useCallback(async (name: string, priority: number, effort: number) => {
+  const handleAddTask = useCallback(async (data: AddTaskData) => {
     if (!user?.uid) return;
     
     try {
-      await addTask(name, priority, effort);
+      await addTask(data);
       // Update user stats
       if (updateStats) {
         await updateStats({ 
@@ -78,7 +99,7 @@ const Index = () => {
       }
       toast({
         title: "Task Added",
-        description: `"${name}" has been added to your task list`,
+        description: `"${data.name}" has been added to your task list`,
       });
     } catch (error) {
       console.error('Error adding task:', error);
@@ -347,6 +368,7 @@ const Index = () => {
               
               <TabsContent value="tasks" className="mt-6">
                 <TaskList
+                  userId={user?.uid}
                   tasks={tasks}
                   onAddTask={handleAddTask}
                   onToggleTask={handleToggleTask}
@@ -412,6 +434,7 @@ const Index = () => {
 
             {activeTab === 'tasks' && (
               <TaskList
+                userId={user?.uid}
                 tasks={tasks}
                 onAddTask={handleAddTask}
                 onToggleTask={handleToggleTask}
