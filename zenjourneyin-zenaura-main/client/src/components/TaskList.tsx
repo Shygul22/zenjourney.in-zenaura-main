@@ -6,10 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus, CheckCircle, Circle, Clock, TrendingUp, Filter, Search, AlertCircle } from 'lucide-react';
+import { Trash2, Plus, CheckCircle, Circle, Clock, TrendingUp, Filter, Search, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Task } from '../pages/Index';
-
-import { Task } from '../pages/Index';
+import { SubtaskList } from './SubtaskList'; // Import SubtaskList
 
 interface AddTaskData { // Mirrored from useFirebaseTasks for clarity, can be imported
   name: string;
@@ -21,6 +20,7 @@ interface AddTaskData { // Mirrored from useFirebaseTasks for clarity, can be im
 }
 
 interface TaskListProps {
+  userId?: string; // Add userId prop
   tasks: Task[];
   onAddTask: (data: AddTaskData) => Promise<void>; // Updated signature
   onToggleTask: (id: string) => void;
@@ -29,6 +29,7 @@ interface TaskListProps {
 }
 
 export const TaskList: React.FC<TaskListProps> = ({
+  userId, // Destructure userId
   tasks,
   onAddTask,
   onToggleTask,
@@ -45,6 +46,7 @@ export const TaskList: React.FC<TaskListProps> = ({
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   const handleAddTask = async () => {
     if (newTaskName.trim()) {
@@ -441,16 +443,30 @@ export const TaskList: React.FC<TaskListProps> = ({
                       )}
                     </div>
                     
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDeleteTask(task.id)}
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50 transition-all duration-200 focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                      aria-label={`Delete task: ${task.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex flex-col items-end space-y-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDeleteTask(task.id)}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50 transition-all duration-200 focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        aria-label={`Delete task: ${task.name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}
+                        className="text-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        aria-label={expandedTaskId === task.id ? 'Hide subtasks' : 'Show subtasks'}
+                      >
+                        {expandedTaskId === task.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </Button>
+                    </div>
                   </div>
+                  {expandedTaskId === task.id && userId && (
+                    <SubtaskList userId={userId} taskId={task.id} />
+                  )}
                 </CardContent>
               </Card>
             );
